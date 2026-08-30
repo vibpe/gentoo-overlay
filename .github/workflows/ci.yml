@@ -35,6 +35,7 @@ jobs:
           sudo mkdir -p /etc/portage/repos.conf
           printf '[DEFAULT]\nmain-repo = gentoo\n\n[gentoo]\nlocation = %s\n' \
             "$HOME/gentoo" | sudo tee /etc/portage/repos.conf/gentoo.conf
+          sudo ln -sfn "$HOME/gentoo/profiles/default/linux/amd64/23.0" /etc/portage/make.profile
 
       - name: Cache pre-commit environments
         uses: actions/cache@v4
