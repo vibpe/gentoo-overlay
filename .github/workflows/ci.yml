@@ -11,37 +11,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-
-      - name: Compute cache week
-        id: week
-        run: echo "week=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache gentoo tree
-        id: gentoo-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/gentoo
-          key: gentoo-tree-${{ steps.week.outputs.week }}
-
-      - name: Clone gentoo tree
-        if: steps.gentoo-cache.outputs.cache-hit != 'true'
-        run: git clone --depth 1 https://github.com/gentoo/gentoo.git ~/gentoo
-
-      - name: Configure pkgcore
+      - name: Run pre-commit in gentoo stage3 against the current tree
         run: |
-          sudo mkdir -p /etc/portage/repos.conf
-          printf '[DEFAULT]\nmain-repo = gentoo\n\n[gentoo]\nlocation = %s\n' \
-            "$HOME/gentoo" | sudo tee /etc/portage/repos.conf/gentoo.conf
-          sudo ln -sfn "$HOME/gentoo/profiles/default/linux/amd64/23.0" /etc/portage/make.profile
-
-      - name: Cache pre-commit environments
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pre-commit
-          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
-
-      - name: Run pre-commit
-        run: pipx run pre-commit run --all-files --show-diff-on-failure
+          docker create --name portage docker.io/gentoo/portage:latest true
+          docker run --rm --volumes-from portage \
+            -v "$PWD":/overlay -w /overlay docker.io/gentoo/stage3:latest \
+            bash -ec '
+              emerge --getbinpkg --quiet dev-vcs/git
+              python -m venv /tmp/pc
+              /tmp/pc/bin/pip --quiet install pre-commit
+              git config --global --add safe.directory /overlay
+              /tmp/pc/bin/pre-commit run --all-files --show-diff-on-failure
+            '
