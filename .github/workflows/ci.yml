@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run pre-commit in gentoo stage3 against the current tree
+        run: |
+          docker create --name portage docker.io/gentoo/portage:latest true
+          docker run --rm --volumes-from portage \
+            -v "$PWD":/overlay -w /overlay docker.io/gentoo/stage3:latest \
+            bash -ec '
+              emerge --getbinpkg --quiet dev-vcs/git
+              python -m venv /tmp/pc
+              /tmp/pc/bin/pip --quiet install pre-commit
+              git config --global --add safe.directory /overlay
+              /tmp/pc/bin/pre-commit run --all-files --show-diff-on-failure
+            '
