@@ -32,8 +32,9 @@ jobs:
 
       - name: Configure pkgcore
         run: |
-          mkdir -p ~/.config/pkgcore
-          printf '[gentoo]\nlocation = %s\n' "$HOME/gentoo" > ~/.config/pkgcore/repos.conf
+          sudo mkdir -p /etc/portage/repos.conf
+          printf '[DEFAULT]\nmain-repo = gentoo\n\n[gentoo]\nlocation = %s\n' \
+            "$HOME/gentoo" | sudo tee /etc/portage/repos.conf/gentoo.conf
 
       - name: Cache pre-commit environments
         uses: actions/cache@v4
