@@ -1,0 +1,57 @@
+name: deps-sync
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+
+      - name: Publish deps tarballs declared in Manifests but missing from releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          fail=0
+          for manifest in */*/Manifest; do
+            dir=$(dirname "$manifest")
+            pn=$(basename "$dir")
+            while read -r file sha; do
+              ver=${file#"${pn}"-}
+              ver=${ver%-deps.tar.xz}
+              tag="${pn}-${ver}"
+              if gh release view "$tag" --json assets -q '.assets[].name' 2>/dev/null | grep -qx "$file"; then
+                echo "OK: ${file} already published"
+                continue
+              fi
+              ebuild="${dir}/${pn}-${ver}.ebuild"
+              upstream=$(grep -oE 'github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/archive' "$ebuild" \
+                | head -n1 | cut -d/ -f2-3)
+              echo "BUILDING: ${file} from ${upstream}"
+              (cd "$(mktemp -d)" && "$GITHUB_WORKSPACE/scripts/mkdeps.sh" "$upstream" "$ver" \
+                && mv "$file" "$GITHUB_WORKSPACE/")
+              built=$(sha512sum "$file" | cut -d' ' -f1)
+              if [ "$built" != "$sha" ]; then
+                echo "HASH MISMATCH for ${file}: Manifest ${sha}, rebuilt ${built}" >&2
+                fail=1
+                continue
+              fi
+              gh release view "$tag" >/dev/null 2>&1 || \
+                gh release create "$tag" --title "${tag} distfiles" \
+                  --notes "Distfiles for ${tag} that are not fetchable upstream."
+              gh release upload "$tag" "$file"
+              echo "PUBLISHED: ${file}"
+            done < <(awk '$1=="DIST" && $2 ~ /-deps\.tar\.xz$/ {print $2, $7}' "$manifest")
+          done
+          exit "$fail"
