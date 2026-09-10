@@ -1,8 +1,10 @@
 #!/bin/sh
 # Bump dev-util/claude-code to the current upstream *stable* version.
 #
-# Only the stable-keyworded ebuild (KEYWORDS without ~) is managed;
-# ~arch ebuilds are hand-picked snapshots and left alone.
+# Only stable-keyworded ebuilds (KEYWORDS without ~) are managed;
+# ~arch ebuilds are hand-picked snapshots and left alone. The previous
+# stable ebuild is kept so machines can roll back easily; older ones
+# are pruned (two stable versions in the tree at any time).
 #
 # Usage: scripts/bump-claude-code.sh [--manifest-only]
 #   --manifest-only  skip the version check/rename, just regenerate Manifest
@@ -16,12 +18,9 @@ set -eu
 overlay=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 pkgdir="$overlay/dev-util/claude-code"
 
-stable_ebuild=$(grep -L 'KEYWORDS="~' "$pkgdir"/claude-code-*.ebuild)
-[ "$(printf '%s\n' "$stable_ebuild" | wc -l)" = 1 ] || {
-	echo "expected exactly one stable-keyworded ebuild, got:" >&2
-	printf '%s\n' "$stable_ebuild" >&2
-	exit 1
-}
+# Newest stable-keyworded ebuild (version sort works for x.y.z upstream).
+stable_ebuild=$(grep -L 'KEYWORDS="~' "$pkgdir"/claude-code-*.ebuild | sort -V | tail -n1)
+[ -n "$stable_ebuild" ] || { echo "no stable-keyworded ebuild found" >&2; exit 1; }
 
 if [ "${1:-}" != "--manifest-only" ]; then
 	cur=$(basename "$stable_ebuild" .ebuild)
@@ -32,7 +31,11 @@ if [ "${1:-}" != "--manifest-only" ]; then
 		echo "up to date"
 		exit 0
 	fi
-	git -C "$overlay" mv "$stable_ebuild" "$pkgdir/claude-code-$new.ebuild"
+	# Keep $cur for easy rollback; prune older stable ebuilds.
+	grep -L 'KEYWORDS="~' "$pkgdir"/claude-code-*.ebuild | sort -V | head -n -1 \
+		| xargs -r git -C "$overlay" rm -q
+	cp "$stable_ebuild" "$pkgdir/claude-code-$new.ebuild"
+	git -C "$overlay" add "$pkgdir/claude-code-$new.ebuild"
 	stable_ebuild="$pkgdir/claude-code-$new.ebuild"
 fi
 
