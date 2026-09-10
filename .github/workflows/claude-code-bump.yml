@@ -1,0 +1,40 @@
+name: claude-code-bump
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Bump dev-util/claude-code to upstream stable
+        run: |
+          docker create --name portage docker.io/gentoo/portage:latest true
+          docker run --rm --volumes-from portage \
+            -v "$PWD":/overlay -w /overlay docker.io/gentoo/stage3:latest \
+            bash -ec '
+              emerge --getbinpkg --quiet dev-vcs/git
+              git config --global --add safe.directory /overlay
+              scripts/bump-claude-code.sh
+            '
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name vibpe
+          git config user.email vibpe@users.noreply.github.com
+          if git diff --quiet; then
+            echo "no change"
+            exit 0
+          fi
+          ver=$(grep -L 'KEYWORDS="~' dev-util/claude-code/claude-code-*.ebuild \
+            | sed -E 's/.*claude-code-(.*)\.ebuild/\1/')
+          git add dev-util/claude-code
+          git commit -m "dev-util/claude-code: bump stable to ${ver}"
+          git push
