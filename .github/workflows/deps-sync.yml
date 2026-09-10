@@ -8,6 +8,12 @@ on:
 permissions:
   contents: write
 
+# Serialize runs: two near-simultaneous merges otherwise race to build
+# and publish the same missing deps tarball, and the loser fails.
+concurrency:
+  group: deps-sync
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
