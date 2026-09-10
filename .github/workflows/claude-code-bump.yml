@@ -33,6 +33,10 @@ jobs:
               emerge --getbinpkg --quiet dev-vcs/git
               git config --global --add safe.directory /overlay
               scripts/bump-claude-code.sh
+              # Bot commits bypass the PR merge gate, so validate here.
+              python -m venv /tmp/pc
+              /tmp/pc/bin/pip --quiet install pre-commit
+              /tmp/pc/bin/pre-commit run --all-files --show-diff-on-failure
             '
 
       - name: Commit and push if changed

@@ -1,8 +1,9 @@
 name: ci
 
+# Merge gate only: main takes squash merges of exactly what the PR
+# validated, and the claude-code-bump workflow runs pre-commit itself
+# before pushing to main.
 on:
-  push:
-    branches: [main]
   pull_request:
 
 jobs:
