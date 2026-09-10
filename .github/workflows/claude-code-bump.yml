@@ -14,7 +14,17 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Check whether upstream stable moved
+        id: check
+        run: |
+          cur=$(grep -L 'KEYWORDS="~' dev-util/claude-code/claude-code-*.ebuild \
+            | sort -V | tail -n1 | sed -E 's/.*claude-code-(.*)\.ebuild/\1/')
+          new=$(curl -fsS https://downloads.claude.ai/claude-code-releases/stable)
+          echo "current=$cur upstream=$new"
+          [ "$cur" = "$new" ] || echo "bump=1" >> "$GITHUB_OUTPUT"
+
       - name: Bump dev-util/claude-code to upstream stable
+        if: steps.check.outputs.bump
         run: |
           docker create --name portage docker.io/gentoo/portage:latest true
           docker run --rm --volumes-from portage \
@@ -23,9 +33,14 @@ jobs:
               emerge --getbinpkg --quiet dev-vcs/git
               git config --global --add safe.directory /overlay
               scripts/bump-claude-code.sh
+              # Bot commits bypass the PR merge gate, so validate here.
+              python -m venv /tmp/pc
+              /tmp/pc/bin/pip --quiet install pre-commit
+              /tmp/pc/bin/pre-commit run --all-files --show-diff-on-failure
             '
 
       - name: Commit and push if changed
+        if: steps.check.outputs.bump
         run: |
           git config user.name vibpe
           git config user.email vibpe@users.noreply.github.com
