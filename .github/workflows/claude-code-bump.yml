@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   bump:
@@ -21,7 +22,13 @@ jobs:
             | sort -V | tail -n1 | sed -E 's/.*claude-code-(.*)\.ebuild/\1/')
           new=$(curl -fsS https://downloads.claude.ai/claude-code-releases/stable)
           echo "current=$cur upstream=$new"
-          [ "$cur" = "$new" ] || echo "bump=1" >> "$GITHUB_OUTPUT"
+          [ "$cur" != "$new" ] || exit 0
+          # A pending bump PR for this version already exists.
+          if git ls-remote --exit-code origin "refs/heads/bot/claude-code-$new" >/dev/null; then
+            echo "bump branch already pushed"
+            exit 0
+          fi
+          echo "bump=1" >> "$GITHUB_OUTPUT"
 
       - name: Bump dev-util/claude-code to upstream stable
         if: steps.check.outputs.bump
@@ -33,14 +40,12 @@ jobs:
               emerge --getbinpkg --quiet dev-vcs/git
               git config --global --add safe.directory /overlay
               scripts/bump-claude-code.sh
-              # Bot commits bypass the PR merge gate, so validate here.
-              python -m venv /tmp/pc
-              /tmp/pc/bin/pip --quiet install pre-commit
-              /tmp/pc/bin/pre-commit run --all-files --show-diff-on-failure
             '
 
-      - name: Commit and push if changed
+      - name: Commit and open PR if changed
         if: steps.check.outputs.bump
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name vibpe
           git config user.email vibpe@users.noreply.github.com
@@ -51,5 +56,10 @@ jobs:
           fi
           ver=$(grep -L 'KEYWORDS="~' dev-util/claude-code/claude-code-*.ebuild \
             | sort -V | tail -n1 | sed -E 's/.*claude-code-(.*)\.ebuild/\1/')
+          git switch -c "bot/claude-code-${ver}"
           git commit -m "dev-util/claude-code: bump stable to ${ver}"
-          git push
+          git push -u origin "bot/claude-code-${ver}"
+          # GITHUB_TOKEN PRs do not trigger ci; run it by hand:
+          #   gh workflow run ci --ref bot/claude-code-${ver}
+          gh pr create --fill \
+            --body "Automated bump. Run \`ci\` manually on this branch before merging."
