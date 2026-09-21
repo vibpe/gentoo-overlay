@@ -44,12 +44,12 @@ jobs:
         run: |
           git config user.name vibpe
           git config user.email vibpe@users.noreply.github.com
-          if git diff --quiet; then
+          git add dev-util/claude-code
+          if git diff --cached --quiet; then
             echo "no change"
             exit 0
           fi
           ver=$(grep -L 'KEYWORDS="~' dev-util/claude-code/claude-code-*.ebuild \
-            | sed -E 's/.*claude-code-(.*)\.ebuild/\1/')
-          git add dev-util/claude-code
+            | sort -V | tail -n1 | sed -E 's/.*claude-code-(.*)\.ebuild/\1/')
           git commit -m "dev-util/claude-code: bump stable to ${ver}"
           git push
