@@ -26,7 +26,7 @@ S="${WORKDIR}"
 # clickthrough EULA-type license. See HOMEPAGE for details.
 LICENSE="all-rights-reserved"
 SLOT="0"
-KEYWORDS="~amd64 ~arm64"
+KEYWORDS="amd64 arm64"
 QA_PREBUILT="opt/bin/claude"
 
 RDEPEND="sys-apps/ripgrep"
