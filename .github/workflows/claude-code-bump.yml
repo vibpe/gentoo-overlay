@@ -59,7 +59,5 @@ jobs:
           git switch -c "bot/claude-code-${ver}"
           git commit -m "dev-util/claude-code: bump stable to ${ver}"
           git push -u origin "bot/claude-code-${ver}"
-          # GITHUB_TOKEN PRs do not trigger ci; a dispatched run does not
-          # satisfy the ruleset either, so the PR must be closed/reopened.
           gh pr create --fill \
-            --body "Automated bump. Close and reopen this PR to trigger the required ci check, then merge."
+            --body "Automated bump; merge once the ci check is green."

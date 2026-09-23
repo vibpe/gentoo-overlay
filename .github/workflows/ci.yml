@@ -1,9 +1,10 @@
 name: ci
 
 # Merge gate only: main takes squash merges of exactly what the PR
-# validated. PRs opened by the claude-code-bump workflow do not trigger
-# pull_request runs (GITHUB_TOKEN events never do); close and reopen
-# the bot PR to get the required check.
+# validated. Bot PRs from claude-code-bump get this run too. Only a
+# pull_request run counts for the ruleset: if one gets stuck or fails
+# transiently, `gh run rerun <id>` it -- a workflow_dispatch run would
+# pass but not satisfy the required check.
 on:
   pull_request:
 
