@@ -1,0 +1,86 @@
+name: mcp-grafana-bump
+
+on:
+  schedule:
+    - cron: "37 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check whether upstream released a newer version
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cur=$(ls dev-util/mcp-grafana/mcp-grafana-*.ebuild \
+            | sort -V | tail -n1 | sed -E 's/.*mcp-grafana-(.*)\.ebuild/\1/')
+          new=$(gh api repos/grafana/mcp-grafana/releases/latest -q .tag_name)
+          new=${new#v}
+          echo "current=$cur upstream=$new"
+          # Only move forward; ignore a re-tagged or yanked older release.
+          [ "$(printf '%s\n%s\n' "$cur" "$new" | sort -V | tail -n1)" != "$cur" ] || exit 0
+          # A pending bump PR for this version already exists.
+          if git ls-remote --exit-code origin "refs/heads/bot/mcp-grafana-$new" >/dev/null; then
+            echo "bump branch already pushed"
+            exit 0
+          fi
+          echo "version=$new" >> "$GITHUB_OUTPUT"
+
+      # Same toolchain setup as deps-sync, which rebuilds this tarball after
+      # merge and refuses to publish it unless the hash matches the Manifest.
+      - uses: actions/setup-go@v6
+        if: steps.check.outputs.version
+        with:
+          go-version: stable
+
+      - name: Build source and deps distfiles
+        if: steps.check.outputs.version
+        run: |
+          mkdir -p "$RUNNER_TEMP/distfiles"
+          cd "$RUNNER_TEMP/distfiles"
+          "$GITHUB_WORKSPACE/scripts/mkdeps.sh" grafana/mcp-grafana "${{ steps.check.outputs.version }}"
+          rm -rf go-mod "mcp-grafana-${{ steps.check.outputs.version }}" ./*-deps.tar
+
+      - name: Bump dev-util/mcp-grafana
+        if: steps.check.outputs.version
+        run: |
+          docker create --name portage docker.io/gentoo/portage:latest true
+          docker run --rm --volumes-from portage \
+            -v "$PWD":/overlay -v "$RUNNER_TEMP/distfiles":/distfiles \
+            -e DISTDIR=/distfiles -w /overlay docker.io/gentoo/stage3:latest \
+            bash -ec '
+              emerge --getbinpkg --quiet dev-vcs/git
+              git config --global --add safe.directory /overlay
+              scripts/bump-mcp-grafana.sh "${{ steps.check.outputs.version }}"
+            '
+
+      - name: Commit and open PR
+        if: steps.check.outputs.version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: ${{ steps.check.outputs.version }}
+        run: |
+          git config user.name vibpe
+          git config user.email 79282744+vibpe@users.noreply.github.com
+          git add dev-util/mcp-grafana
+          if git diff --cached --quiet; then
+            echo "no change"
+            exit 0
+          fi
+          git switch -c "bot/mcp-grafana-${VER}"
+          git commit -m "dev-util/mcp-grafana: bump to ${VER}"
+          git push -u origin "bot/mcp-grafana-${VER}"
+          gh pr create --fill \
+            --body "Upstream release: https://github.com/grafana/mcp-grafana/releases/tag/v${VER}"
+          # GITHUB_TOKEN pushes do not trigger pull_request runs; dispatch
+          # ci explicitly so the PR gets its required check.
+          gh workflow run ci --ref "bot/mcp-grafana-${VER}"
