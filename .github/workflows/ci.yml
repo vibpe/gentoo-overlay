@@ -1,9 +1,9 @@
 name: ci
 
 # Merge gate only: main takes squash merges of exactly what the PR
-# validated. PRs opened by the claude-code-bump workflow do not trigger
-# pull_request runs (GITHUB_TOKEN events never do); dispatch this
-# workflow manually on the bot branch to get the required check.
+# validated. PRs opened by the *-bump workflows do not trigger
+# pull_request runs (GITHUB_TOKEN events never do); those workflows
+# dispatch this one on their bot branch to get the required check.
 on:
   pull_request:
   workflow_dispatch:
