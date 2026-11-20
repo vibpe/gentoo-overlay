@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -48,7 +49,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name vibpe
-          git config user.email vibpe@users.noreply.github.com
+          git config user.email 79282744+vibpe@users.noreply.github.com
           git add dev-util/claude-code
           if git diff --cached --quiet; then
             echo "no change"
@@ -59,7 +60,7 @@ jobs:
           git switch -c "bot/claude-code-${ver}"
           git commit -m "dev-util/claude-code: bump stable to ${ver}"
           git push -u origin "bot/claude-code-${ver}"
-          # GITHUB_TOKEN PRs do not trigger ci; run it by hand:
-          #   gh workflow run ci --ref bot/claude-code-${ver}
-          gh pr create --fill \
-            --body "Automated bump. Run \`ci\` manually on this branch before merging."
+          gh pr create --fill --body "Automated bump."
+          # GITHUB_TOKEN pushes do not trigger pull_request runs; dispatch
+          # ci explicitly so the PR gets its required check.
+          gh workflow run ci --ref "bot/claude-code-${ver}"
